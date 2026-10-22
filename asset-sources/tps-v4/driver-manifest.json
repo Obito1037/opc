@@ -1,0 +1,17 @@
+{
+  "source": "https://snap-research.github.io/articulated-animation/videos/taichi-comparison/example1.mp4",
+  "context": "https://snap-research.github.io/articulated-animation/",
+  "cropLTRB": [
+    124,
+    256,
+    380,
+    512
+  ],
+  "frames": 100,
+  "fps": 10,
+  "width": 256,
+  "height": 256,
+  "sourceSha256": "dc1e03fa46d0fdb2fbcbf588644f3d4071deccf3c1c44a04cde766c7ccef4e20",
+  "driverSha256": "e28681154dc0a586199b1bfa46131d8570810db19193d2a2184fb2f690ac9906",
+  "rights": "Author-published research demonstration. No independent rights clearance for commercial use or competition redistribution. Local research fixture only."
+}

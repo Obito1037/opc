@@ -1,0 +1,63 @@
+// Integration-only QA against a real, unconfigured API. Never submits image data.
+const {chromium}=require('C:/Users/20665/AppData/Local/OpenAI/Codex/runtimes/cua_node/78fb63cda1a9e2b2/bin/node_modules/playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const base=process.env.STUDIO_TEST_URL||'http://127.0.0.1:5178',apiBase=process.env.STUDIO_API_URL||'http://127.0.0.1:5179';
+const output=path.resolve('test-results/generation-v4'),checks=[],issues=[],errors=[],requests=[];fs.mkdirSync(output,{recursive:true});let browser;
+(async()=>{
+ browser=await chromium.launch({channel:'msedge',headless:true});
+ const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce'});
+ await context.addInitScript(()=>localStorage.setItem('yingshen-preferences',JSON.stringify({theme:'light',quality:'balanced',motion:'reduced',backdrop:'pearl'})));
+ let capabilities;
+ await context.route('**/api/**',async route=>{
+  const request=route.request(),url=new URL(request.url());requests.push({method:request.method(),path:url.pathname});
+  assert.equal(request.method(),'GET','Read-only verification must never submit or delete generation jobs');
+  const response=await route.fetch({url:apiBase+url.pathname+url.search,headers:{...request.headers(),origin:apiBase}});
+  if(url.pathname==='/api/capabilities')capabilities=await response.json();
+  await route.fulfill({response});
+ });
+ const p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));
+ await p.goto(base,{waitUntil:'domcontentloaded'});await p.waitForFunction(()=>window.__YINGSHEN__?.ready(),{},{timeout:90000});
+ const state=()=>p.evaluate(()=>window.__YINGSHEN__.getState());
+ assert.equal((await state()).avatarPerformance.paused,true);checks.push('主工作台通过减少动态设置启动为暂停；未运行性能基准');
+ await p.setInputFiles('#photo-input',path.resolve('public/demo/studio-model-v2.png'));await p.waitForFunction(()=>!document.querySelector('#photo-thumbnail').hidden&&!document.querySelector('#generate').disabled);
+ const sourceSize=await p.locator('#photo-thumbnail').evaluate(e=>({width:e.naturalWidth,height:e.naturalHeight}));
+ await p.click('#ai-tryon');await p.waitForFunction(()=>document.querySelector('.generation-studio')?.open&&!document.querySelector('[data-preview=person]').hidden);
+ await p.waitForFunction(()=>document.querySelector('.gen-service').textContent.includes('未连接'));
+ assert.equal(await p.locator('[data-filename=person]').textContent(),'studio-model-v2.png');
+ assert.deepEqual(await p.locator('[data-preview=person]').evaluate(e=>({width:e.naturalWidth,height:e.naturalHeight})),sourceSize);
+ checks.push('主页面上传的当前人物 File 自动进入真实试穿工作台；图片尺寸与文件名一致');
+ assert.equal(capabilities.tryOn.configured,false);assert.equal(capabilities.motion.configured,false);
+ assert.equal(await p.locator('[data-action=generate]').isDisabled(),true);assert.equal(await p.locator('[data-action=generate-motion]').isDisabled(),true);
+ assert.equal(await p.locator('[data-result]').isVisible(),false);assert.equal(await p.locator('[data-motion-video-wrap]').isVisible(),false);
+ checks.push('实际同源 API 未配置时试穿与动作按钮均禁用，未展示伪造结果');
+ const before=await state();
+ await p.locator('[data-field=category]').focus();
+ await p.locator('[data-field=category]').evaluate(el=>{for(const key of ['f',' ','s'])el.dispatchEvent(new KeyboardEvent('keydown',{key,ctrlKey:key==='s',bubbles:true}));});
+ const after=await state();assert.equal(after.focused,before.focused);assert.equal(after.saved,before.saved);assert.equal(after.paused,before.paused);assert.equal(after.avatarPerformance.paused,true);
+ checks.push('对话框内 F、空格、Ctrl+S 不触发主工作台专注、播放或收藏快捷键');
+ const keyboardFocus=[];await p.locator('[data-action=close]').focus();
+ for(let i=0;i<30;i++){await p.keyboard.press(i<15?'Tab':'Shift+Tab');keyboardFocus.push(await p.evaluate(()=>({inside:!!document.activeElement.closest('.generation-studio'),tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label')||document.activeElement.dataset.action||''})));}
+ assert.ok(keyboardFocus.every(item=>item.inside||item.tag==='BODY'),'Native modal keyboard focus should not enter the background studio');checks.push('原生模态 Tab / Shift+Tab 连续循环不会进入背后工作台（原生边界允许浏览器焦点）');
+ await p.screenshot({path:path.join(output,'integrated-desktop-unconfigured.png')});
+ await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.querySelector('.generation-studio').open);
+ assert.equal(await p.evaluate(()=>document.activeElement.id),'ai-tryon');assert.equal((await state()).avatarPerformance.paused,true);checks.push('Esc 关闭工作台后焦点回到入口，原本暂停的模型保持暂停');
+ // Only a brief state transition, immediately paused again; no FPS sampling.
+ await p.click('#pause-motion');assert.equal((await state()).paused,false);await p.click('#ai-tryon');await p.waitForFunction(()=>document.querySelector('.generation-studio').open);
+ assert.equal((await state()).paused,false);assert.equal((await state()).avatarPerformance.paused,true);
+ await p.click('[data-action=close]');await p.waitForFunction(()=>!document.querySelector('.generation-studio').open&&window.__YINGSHEN__.getState().avatarPerformance.paused===false);
+ await p.click('#pause-motion');assert.equal((await state()).avatarPerformance.paused,true);checks.push('播放中的模型在打开模态后临时暂停，关闭后恢复原状态；立即手动暂停结束验证');
+ await p.setViewportSize({width:390,height:844});await p.evaluate(()=>scrollTo(0,0));
+ const mobileMain=await p.evaluate(()=>{const e=document.querySelector('#ai-tryon'),s=getComputedStyle(e),r=e.getBoundingClientRect();return{viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,button:{x:r.x,right:r.right,width:r.width,background:s.backgroundColor,color:s.color,marginLeft:s.marginLeft},overflow:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.left<-.5||r.right>innerWidth+.5)&&getComputedStyle(el).position!=='fixed';}).slice(0,12).map(e=>({tag:e.tagName,id:e.id,class:e.className}))};});
+ if(mobileMain.button.background===mobileMain.button.color)issues.push({severity:'high',code:'AI_ENTRY_INVISIBLE',message:'主页面 AI 入口背景与文字同色',details:mobileMain.button});
+ if(mobileMain.scrollWidth>390)issues.push({severity:'high',code:'MAIN_MOBILE_OVERFLOW',details:mobileMain});
+ else checks.push('390px 主页面文档无横向溢出');
+ await p.screenshot({path:path.join(output,'integrated-mobile-main.png'),fullPage:true});await p.click('#ai-tryon');await p.waitForFunction(()=>document.querySelector('.generation-studio').open);
+ const mobileDialog=await p.locator('.generation-studio').evaluate(e=>({width:e.getBoundingClientRect().width,scrollWidth:e.scrollWidth,contentScrollWidth:e.querySelector('.gen-content').scrollWidth,contentWidth:e.querySelector('.gen-content').clientWidth}));
+ assert.ok(mobileDialog.scrollWidth<=390);assert.ok(mobileDialog.contentScrollWidth<=mobileDialog.contentWidth);checks.push('390px 试穿对话框内部无横向溢出');
+ await p.screenshot({path:path.join(output,'integrated-mobile-dialog.png')});await p.click('[data-action=toggle-workflow]');
+ assert.equal(await p.locator('[data-motion-source-image]').isVisible(),true);assert.equal(await p.locator('[data-action=generate-motion]').isDisabled(),true);
+ await p.screenshot({path:path.join(output,'integrated-mobile-motion.png')});checks.push('照片动作独立入口继承人物图，遵守真实未配置状态');
+ await p.keyboard.press('Escape');assert.equal((await state()).avatarPerformance.paused,true);assert.deepEqual(errors,[]);
+ const report={passed:issues.length===0,checks,issues,errors,usesMockApi:false,readOnlyApi:true,realGenerationVerified:false,base,apiBase,sourceSize,mobileMain,mobileDialog,capabilities,requests,keyboardFocus,time:new Date().toISOString()};
+ fs.writeFileSync(path.join(output,'integration.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({checks,issues,errors},null,2));if(issues.length)process.exitCode=1;
+})().catch(error=>{fs.writeFileSync(path.join(output,'integration-failure.json'),JSON.stringify({error:error.stack,checks,issues,errors,time:new Date().toISOString()},null,2));console.error(error);process.exitCode=1;}).finally(()=>browser?.close());

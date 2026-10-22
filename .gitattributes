@@ -1,0 +1,19 @@
+* text=auto
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.ps1 text eol=crlf
+*.glb binary
+*.blend binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.wasm binary
+*.task binary
+*.tflite binary

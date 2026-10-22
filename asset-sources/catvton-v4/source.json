@@ -1,0 +1,31 @@
+{
+  "files": [
+    {
+      "file": "model/pipeline.py",
+      "sha256": "7231A2D50BE5FEE3958A8B77643959B3C88F0385A6C6BBC3D910804F40974349"
+    },
+    {
+      "file": "model/attn_processor.py",
+      "sha256": "51F793CAEB7C828B0D479120142DB5B735F8FE7C3EFCF56AD8C130388D7A6244"
+    },
+    {
+      "file": "model/utils.py",
+      "sha256": "9E5041C963126FBA8053648CB0B52B2427EAF817C02BDD23421175E80C24EB7F"
+    },
+    {
+      "file": "utils.py",
+      "sha256": "3D31693279CF9D217FC6EFA9F7499D9A9BD58FB71E9B679DCAD12A58CC2AB710"
+    },
+    {
+      "file": "LICENSE",
+      "sha256": "095791F7F830B929A5C4C5BD8FB9E62A1694336FC6B915F771E25A44015C403C"
+    },
+    {
+      "file": "README.md",
+      "sha256": "795AA6A5AEB83DEB82C793D7A18430B6B48C09393F4939941FD1B0688233630A"
+    }
+  ],
+  "downloadedAt": "2026-10-21T16:34:32.1097101+08:00",
+  "repository": "https://github.com/Zheng-Chong/CatVTON",
+  "ref": "main"
+}

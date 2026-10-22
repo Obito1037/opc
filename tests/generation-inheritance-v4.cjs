@@ -1,0 +1,18 @@
+// One focused regression: keep a user's internal photo across modal reopen.
+const {chromium}=require('C:/Users/20665/AppData/Local/OpenAI/Codex/runtimes/cua_node/78fb63cda1a9e2b2/bin/node_modules/playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const base=process.env.STUDIO_TEST_URL||'http://127.0.0.1:5178',output=path.resolve('test-results/generation-v4');let browser;
+(async()=>{
+ browser=await chromium.launch({channel:'msedge',headless:true});const p=await browser.newPage({viewport:{width:1000,height:900},reducedMotion:'reduce'}),checks=[],errors=[];p.on('pageerror',error=>errors.push(error.message));
+ await p.route('**/api/**',route=>{assert.equal(route.request().method(),'GET');return route.fulfill({contentType:'application/json',body:JSON.stringify(new URL(route.request().url()).pathname==='/api/capabilities'?{tryOn:{configured:false},motion:{configured:false,presets:[]}}:{jobs:[]})});});
+ await p.goto(base+'/tests/generation-v4.html',{waitUntil:'domcontentloaded',timeout:90000});await p.waitForFunction(()=>window.testReady);
+ await p.evaluate(async()=>{window.generationTest.destroy();const {mountGenerationStudio}=await import('/src/generation-studio.js'),blob=await(await fetch('/demo/studio-model-v2.png')).blob();window.inheritanceFiles=Object.fromEntries(['A','C','D'].map(name=>[name,new File([blob],name+'.png',{type:'image/png'})]));window.parentPerson=window.inheritanceFiles.A;window.mountInheritance=()=>mountGenerationStudio({getPersonFile:()=>window.parentPerson});window.generationTest=window.mountInheritance();await window.generationTest.open();});
+ const name=()=>p.locator('[data-filename=person]').textContent(),reopen=()=>p.evaluate(async()=>{window.generationTest.close();await window.generationTest.open();});
+ assert.equal(await name(),'A.png');checks.push('首次打开继承主工作台A');
+ await p.setInputFiles('[data-file=person]',{name:'B.png',mimeType:'image/png',buffer:fs.readFileSync(path.resolve('public/demo/studio-model-v2.png'))});await p.waitForFunction(()=>document.querySelector('[data-filename=person]').textContent==='B.png');await reopen();assert.equal(await name(),'B.png');checks.push('内部改为B后关闭再开仍为B，主台旧A不覆盖');
+ await p.evaluate(()=>{window.parentPerson=window.inheritanceFiles.C;});await reopen();assert.equal(await name(),'C.png');checks.push('主台File引用变为C时重新继承C');
+ await p.evaluate(async()=>{window.generationTest.close();await window.generationTest.open({personFile:window.inheritanceFiles.D});});assert.equal(await name(),'D.png');await reopen();assert.equal(await name(),'D.png');checks.push('显式personFile D优先替换，复开仍保留D');
+ await p.click('[data-clear=person]');await reopen();assert.equal(await p.locator('[data-preview=person]').isVisible(),false);assert.equal(await name(),'JPG / PNG / WebP');checks.push('内部主动移除人物后复开仍为空');
+ await p.evaluate(async()=>{window.generationTest.destroy();window.parentPerson=window.inheritanceFiles.A;window.generationTest=window.mountInheritance();await window.generationTest.open({personFile:window.inheritanceFiles.D});});await reopen();assert.equal(await name(),'D.png');checks.push('首次显式打开D会记住主台A基线，后续复开不覆盖D');
+ await p.evaluate(()=>{window.parentPerson=null;});await reopen();assert.equal(await name(),'D.png');assert.deepEqual(errors,[]);const report={passed:true,checks,errors,usesMockApi:true,realGenerationVerified:false,scope:'Single photo-inheritance regression; no generation submitted',time:new Date().toISOString()};fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'inheritance-contract.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>browser?.close());

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "verified": true,
+  "reason": "Approved only as a limited experiment on one AI-generated studio model. This does not verify a fresh installation or general animation quality.",
+  "presets": {
+    "owned-subtle": {
+      "file": "../../asset-sources/tps-v4/owned-driver-v2/owned-subtle-shift.mp4",
+      "label": "轻微姿态 · 实验",
+      "verified": true,
+      "acceptedAsExperimental": true,
+      "maxFrames": 24,
+      "fps": 8,
+      "startSeconds": 0,
+      "motionStrength": 0.5,
+      "normalizeDriving": true,
+      "mode": "relative",
+      "sourceFit": "contain",
+      "source": "MakeHuman CC0 graphical assets adapted by this project, with project-authored skeletal animation. No research or personal driving video.",
+      "sourceManifest": "../../asset-sources/tps-v4/owned-driver-v2/manifest.json",
+      "assetLicense": "https://github.com/makehumancommunity/makehuman/blob/master/LICENSE.ASSETS.md",
+      "limitations": "3 seconds, 8 fps, 256x256. Face softness and deformation remain; legs are nearly static. Identity, clothing texture and realistic full-body motion are not guaranteed."
+    }
+  }
+}

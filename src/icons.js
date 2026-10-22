@@ -1,0 +1,51 @@
+const paths = {
+  logo:'<path d="m4 3 8 8 8-8M12 11v10M5 10l7 7 7-7"/>',
+  undo:'<path d="m8 4-5 5 5 5M3 9h11a6 6 0 0 1 0 12h-3"/>',
+  redo:'<path d="m16 4 5 5-5 5m5-5H10a6 6 0 0 0 0 12h3"/>',
+  expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  collapse:'<path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+  moon:'<path d="M20 14A8.5 8.5 0 0 1 10 3a9 9 0 1 0 10 11Z"/>',
+  settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--surface,#fff)"/><circle cx="16" cy="17" r="3" fill="var(--surface,#fff)"/>',
+  split:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 3v18m-5-9h2m6 0h2"/>',
+  hanger:'<path d="M10 6a2 2 0 1 1 3 1.7c-.7.4-1 1-1 1.8L3 15a1.5 1.5 0 0 0 .8 2.8h16.4A1.5 1.5 0 0 0 21 15l-9-5.5"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+  heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4m.1 3h.01"/>',
+  upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>',
+  sparkle:'<path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3L12 3ZM20 2v4m-2-2h4"/>',
+  arrow:'<path d="M4 12h16m-6-6 6 6-6 6"/>',
+  chevron:'<path d="m9 5 7 7-7 7"/>',
+  check:'<path d="m5 12 4 4L19 6"/>',
+  lock:'<rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/>',
+  user:'<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+  search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',
+  rotate:'<path d="M20 8a9 9 0 1 0 1 6M20 3v5h-5"/>',
+  download:'<path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/>',
+  video:'<rect x="3" y="5" width="12" height="14" rx="3"/><path d="m15 9 6-3v12l-6-3"/>',
+  pause:'<path d="M8 5v14M16 5v14"/>',
+  play:'<path d="m8 4 12 8-12 8V4Z"/>',
+  walk:'<circle cx="14" cy="4" r="2"/><path d="m7 12 4-5 5 4h4m-9-4-1 8-4 6m4-6 5 2 2 4"/>',
+  wave:'<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6-8a1.5 1.5 0 0 1 3 0v8-6a1.5 1.5 0 0 1 3 0v7-3a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-12 5l-5-6a1.5 1.5 0 0 1 2-2l3 1Z"/>',
+  close:'<path d="m6 6 12 12M6 18 18 6"/>',
+  trash:'<path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',
+  layers:'<path d="m12 3 10 6-10 6L2 9l10-6ZM2 13l10 6 10-6M2 17l10 6 10-6"/>',
+  photo:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 5 5 3-3 4 4"/>',
+  cube:'<path d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10v10M3 7l9 5 9-5M7 4l10 6"/>',
+};
+export function icon(name, cls='') { return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.sparkle}</svg>`; }
+export function productArt(type,color='#899a7b') {
+  const shapes = {
+    shirt:`<path d="m60 29 20-8q20 16 40 0l20 8 28 33-23 18-13-16v83H68V64L55 80 32 62Z" fill="${color}"/><path d="M80 21q20 28 40 0M68 64l-5-21m69 21 5-21M75 139h50" fill="none" stroke="#000" opacity=".16" stroke-width="2"/>`,
+    jacket:`<path d="m65 29 22-9h26l22 9 25 108-24 5-10-73 4 81H70l4-81-10 73-24-5Z" fill="${color}"/><path d="m87 20 13 29 13-29 11 19-15 20 7 19-16 26-16-26 7-19-15-20Z" fill="#fff" opacity=".16"/><path d="M100 49v101M77 111h16m14 0h16" stroke="#000" stroke-width="2" opacity=".23"/><circle cx="105" cy="104" r="2" fill="#d4b38a"/>`,
+    dress:`<path d="m77 20 10 3q13 10 26 0l10-3 7 41-15 21 31 78H54l31-78-15-21Z" fill="${color}"/><path d="M85 82h30M89 91l-13 61m34-61 14 61m-23-62v62" stroke="#000" opacity=".13" fill="none" stroke-width="2"/><path d="M82 28q18 14 36 0" stroke="#fff" opacity=".3" fill="none"/>`,
+    sneakers:`<path d="m40 87 13-34 25 25 21-16 20 29 34 13q20 6 13 25H37q-12-22 3-42Z" fill="${color}" stroke="#d6d2c8" stroke-width="2"/><path d="M37 129h129v11H37Z" fill="#fcfaf4"/><path d="m88 83 17-7m-12 16 18-7m-9 16 17-7M45 99l26 13 31-6" stroke="#899a7b" stroke-width="5" fill="none"/>`,
+    boots:`<path d="M66 29h52l-4 70q4 11 31 17 20 4 18 24H59l-6-25Z" fill="${color}"/><path d="M59 140h105v9H96v-3H76v10H55Z" fill="#302e2b"/><path d="M74 37v65q-8 18-4 33M114 103l-18 5" fill="none" stroke="#fff" opacity=".18" stroke-width="2"/>`,
+    glasses:`<g fill="#b8aca0" fill-opacity=".2" stroke="${color}" stroke-width="5"><rect x="35" y="70" width="57" height="41" rx="17"/><rect x="108" y="70" width="57" height="41" rx="17"/><path d="M92 82q8-7 16 0M35 78 25 65m140 13 10-13" fill="none"/></g>`,
+    earrings:`<g fill="none" stroke="${color}" stroke-width="7"><ellipse cx="66" cy="96" rx="22" ry="33"/><ellipse cx="134" cy="96" rx="22" ry="33"/></g><circle cx="66" cy="55" r="5" fill="${color}"/><circle cx="134" cy="55" r="5" fill="${color}"/>`,
+    necklace:`<path d="M55 35q-11 86 45 98 56-12 45-98" fill="none" stroke="${color}" stroke-width="3"/><path d="m100 120 12 17-12 18-12-18Z" fill="${color}"/><path d="m100 125 5 12-5 10-5-10Z" fill="#f4dfac"/>`,
+    lipstick:`<g transform="rotate(16 100 90)"><rect x="76" y="81" width="48" height="70" rx="5" fill="#363f36"/><path d="M84 81V43q5-22 32-24v62Z" fill="${color}"/><path d="M76 81h48v18H76Z" fill="#c3a36b"/><path d="M87 108v32" stroke="#fff" opacity=".15" stroke-width="3"/></g>`,
+    none:`<circle cx="100" cy="90" r="42" stroke="#b7b4a9" stroke-width="2" stroke-dasharray="5 5" fill="none"/><path d="m85 90 10 10 20-22" stroke="#b7b4a9" stroke-width="3" fill="none"/>`
+  };
+  return `<svg viewBox="0 0 200 180" aria-hidden="true"><defs><filter id="shadow-${type}"><feDropShadow dx="0" dy="7" stdDeviation="5" flood-opacity=".09"/></filter></defs><ellipse cx="100" cy="157" rx="48" ry="5" fill="#000" opacity=".035"/><g filter="url(#shadow-${type})">${shapes[type]||shapes.shirt}</g></svg>`;
+}

@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Owned skeletal motion driver render</title>
+<style>html,body{margin:0;width:256px;height:256px;overflow:hidden;background:#d9dedc}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#d9dedc');
+const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,powerPreference:'low-power'});
+renderer.setSize(256,256);renderer.setPixelRatio(1);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
+document.body.appendChild(renderer.domElement);
+// Fixed, frontal orthographic camera: no pan, zoom, camera animation or labels.
+const camera=new THREE.OrthographicCamera(-1.95,1.95,1.95,-1.95,.1,20);
+camera.position.set(0,1.65,7);camera.lookAt(0,1.65,0);
+scene.add(new THREE.HemisphereLight('#fff9ee','#b9c4c2',2.4));
+const key=new THREE.DirectionalLight('#fff8ef',2.1);key.position.set(-3,5,6);scene.add(key);
+const fill=new THREE.DirectionalLight('#eef2ff',1);fill.position.set(4,3,4);scene.add(fill);
+
+const loaded=await new GLTFLoader().loadAsync('/atelier-body.glb');
+const rig=loaded.scene;scene.add(rig);
+const bones={},rest={},meshes=[];
+rig.traverse(object=>{
+  if(object.isBone){
+    const name=object.name.replace(/(Arm|Hand|Thigh|Shin|Foot)([LR])$/,'$1.$2');
+    bones[name]=object;rest[name]={position:object.position.clone(),quaternion:object.quaternion.clone()};
+  }
+  if(object.isMesh){
+    meshes.push(object.name);object.visible=['CeramicBody','Shirt','Trousers'].includes(object.name);object.frustumCulled=false;
+    const colors={CeramicBody:'#c09c7f',Shirt:'#57768a',Trousers:'#373d45'};
+    object.material=new THREE.MeshStandardMaterial({color:colors[object.name]||'#777777',roughness:.84,metalness:0,side:THREE.DoubleSide});
+  }
+});
+const required=['Hips','Spine','Chest','Neck','Head','UpperArm.L','UpperArm.R','ForeArm.L','ForeArm.R','Thigh.L','Thigh.R','Shin.L','Shin.R','Foot.L','Foot.R'];
+for(const name of required)if(!bones[name])throw new Error('Missing bone '+name);
+const rotation=new THREE.Quaternion(),euler=new THREE.Euler(),point=new THREE.Vector3();
+function rotate(name,x=0,y=0,z=0){const bone=bones[name];rotation.setFromEuler(euler.set(x,y,z));bone.quaternion.copy(rest[name].quaternion).multiply(rotation);}
+
+// Original, deterministic articulation. The GLB contains no animation clip.
+// Parameters are radians, relative to the asset's neutral pose; one cycle/3s.
+function pose(t){
+  const phase=2*Math.PI*t/3,sway=Math.sin(phase),bend=(1-Math.cos(phase))/2;
+  for(const [name,bone]of Object.entries(bones)){bone.position.copy(rest[name].position);bone.quaternion.copy(rest[name].quaternion);}
+  rotate('Hips',0,0,.009*sway);
+  rotate('Spine',0,0,-.035*sway);
+  rotate('Chest',.008*bend,0,.012*sway);
+  rotate('Neck',-.008*bend,0,.007*sway);
+  rotate('Head',0,.012*sway,.007*sway);
+  for(const [side,sign]of [['L',1],['R',-1]]){
+    rotate('UpperArm.'+side,-.015-.022*bend,0,sign*.045+.025*sway);
+    rotate('ForeArm.'+side,-.06-.045*bend,0,sign*.012*bend);
+    rotate('Hand.'+side,0,.014*sway,sign*.025);
+    rotate('Thigh.'+side,sign*.009-.008*bend,0,sign*.008-.009*sway);
+    rotate('Shin.'+side,.015+.016*bend,0,0);
+    rotate('Foot.'+side,-.008*bend,0,0);
+  }
+  rig.updateMatrixWorld(true);
+}
+window.renderOwnedFrame=(index,fps=8)=>{
+  pose(index/fps);renderer.render(scene,camera);
+  const joints={};
+  for(const name of required){bones[name].getWorldPosition(point);joints[name]={position:point.toArray(),quaternion:bones[name].quaternion.toArray()};}
+  return{png:renderer.domElement.toDataURL('image/png'),time:index/fps,joints,
+    camera:{position:camera.position.toArray(),quaternion:camera.quaternion.toArray()},
+    rig:{position:rig.position.toArray(),quaternion:rig.quaternion.toArray()}};
+};
+window.ownedDriverInfo={width:256,height:256,fps:8,frames:24,duration:3,bones:Object.keys(bones),meshes,
+  articulation:'Original 3-second sine-cycle spine/chest counter-lean, subtle elbow flexion, knee flexion and head counter-rotation. No root translation or camera motion.',
+  renderingOnly:true,neuralMotionQualityVerified:false};
+window.ownedDriverReady=true;
+</script>

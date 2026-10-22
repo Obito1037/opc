@@ -1,0 +1,12 @@
+const {chromium}=require('C:/Users/20665/AppData/Local/OpenAI/Codex/runtimes/cua_node/78fb63cda1a9e2b2/bin/node_modules/playwright');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const output=path.resolve('test-results/performance-v3');
+(async()=>{const b=await chromium.launch({channel:'msedge',headless:true});const p=await b.newPage({viewport:{width:1440,height:900}}),steps=[];const base=process.env.STUDIO_TEST_URL||'http://127.0.0.1:5177';
+ async function state(name){const data=await p.evaluate(()=>{const canvas=document.querySelector('#avatar-stage canvas'),copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;const ctx=copy.getContext('2d');ctx.drawImage(canvas,0,0);const pixels=ctx.getImageData(0,0,copy.width,copy.height).data;let visible=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i]>32)visible++;return{state:window.__YINGSHEN__.getState().avatarPerformance,visiblePixels:visible,size:[canvas.width,canvas.height],rect:canvas.getBoundingClientRect().toJSON()};});steps.push({name,...data});console.log(name,JSON.stringify(data));return data;}
+ try{await p.goto(base,{waitUntil:'networkidle'});await p.waitForFunction(()=>window.__YINGSHEN__?.ready());await p.locator('#pause-motion').click();await p.waitForTimeout(350);await state('paused');
+  for(const color of['#78939f','#899a7b','#b88884']){const el=p.locator('[data-color="'+color+'"]');if(await el.count())await el.click();}
+  await p.locator('#focus-stage').click();await p.keyboard.press('Escape');const restored=await state('focus-restored');assert.ok(restored.visiblePixels>15000);
+  await p.locator('#studio-settings').click();await p.locator('#theme-setting').selectOption('dark');await p.locator('#quality-setting').selectOption('balanced');await p.locator('#backdrop-setting').selectOption('ink');await p.locator('#motion-setting').selectOption('reduced');await state('settings-open');
+  await p.locator('#close-dialog').click();const immediate=await state('dialog-closed');await p.screenshot({path:path.join(output,'dialog-dark-immediate.png'),fullPage:true});await p.waitForTimeout(700);const settled=await state('settled');await p.screenshot({path:path.join(output,'dialog-dark-settled.png'),fullPage:true});assert.ok(immediate.visiblePixels>15000);assert.ok(settled.visiblePixels>15000);
+ }finally{fs.writeFileSync(path.join(output,'dialog-regression.json'),JSON.stringify(steps,null,2));await b.close();}
+})().catch(e=>{console.error(e);process.exit(1)});

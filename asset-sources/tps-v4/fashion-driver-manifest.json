@@ -1,0 +1,15 @@
+{
+  "source": "https://raw.githubusercontent.com/AliaksandrSiarohin/first-order-model/master/sup-mat/fashion-teaser.gif",
+  "context": "https://github.com/AliaksandrSiarohin/first-order-model#example-animations",
+  "cropLTRB": [
+    56,
+    56,
+    456,
+    456
+  ],
+  "frames": 35,
+  "fps": 10,
+  "sourceSha256": "b391e0e46ab39e9eae48b5987a319a14dfa7b558eba4de2fc060b2d5d1050e83",
+  "driverSha256": "8577b78813c75d890f3c5f10a55ae3ec2e8383bf8d3573d63346557c599d25ed",
+  "rights": "Public author research demo; rights to fashion video not independently cleared. Local research only."
+}

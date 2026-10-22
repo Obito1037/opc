@@ -1,0 +1,9 @@
+upstream/
+*.pth.tar
+*.download
+*.gif
+*.mp4
+*.png
+
+# The default driver is rendered from our CC0 avatar and original animation.
+!owned-driver-v2/owned-subtle-shift.mp4

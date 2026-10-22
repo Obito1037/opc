@@ -1,0 +1,778 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Original, deliberately stylized fitting mannequin. All surfaces are generated
+// locally. The articulated preview is not a reconstruction or a size guarantee.
+const TAU = Math.PI * 2;
+const clamp = THREE.MathUtils.clamp;
+const mat = (color, options = {}) => new THREE.MeshStandardMaterial({
+  color, roughness: 0.65, metalness: 0, ...options,
+});
+
+function mesh(parent, geometry, material, position = [0, 0, 0], scale) {
+  const object = new THREE.Mesh(geometry, material);
+  object.position.set(...position);
+  if (scale) object.scale.set(...scale);
+  object.castShadow = true;
+  object.receiveShadow = true;
+  parent.add(object);
+  return object;
+}
+
+function group(parent, position = [0, 0, 0]) {
+  const object = new THREE.Group();
+  object.position.set(...position);
+  parent.add(object);
+  return object;
+}
+
+function oval(parent, material, position, scale, segments = 28) {
+  return mesh(parent, new THREE.SphereGeometry(1, segments, 20), material, position, scale);
+}
+
+// Elliptical loft with Catmull-Rom interpolation makes continuous shoulder,
+// waist, hip and garment contours, rather than stacks of primitives.
+function loft(rings, segments = 48, subdivisions = 3, pleats = 0) {
+  const contour = new THREE.CatmullRomCurve3(
+    rings.map(([y, x, z]) => new THREE.Vector3(x, y, z)), false, 'catmullrom', 0.22,
+  );
+  const steps = (rings.length - 1) * subdivisions;
+  const positions = [], uvs = [], indices = [];
+  for (let j = 0; j <= steps; j++) {
+    const p = contour.getPoint(j / steps);
+    for (let i = 0; i <= segments; i++) {
+      const angle = i / segments * TAU;
+      const fold = 1 + pleats * Math.cos(angle * 14) * (1 - j / steps);
+      positions.push(Math.sin(angle) * p.x * fold, p.y, Math.cos(angle) * p.z * fold);
+      uvs.push(i / segments, j / steps);
+      if (j < steps && i < segments) {
+        const a = j * (segments + 1) + i, b = a + segments + 1;
+        indices.push(a, a + 1, b, a + 1, b + 1, b);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function line(parent, points, material, radius = 0.008, closed = false) {
+  const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)), closed);
+  return mesh(parent, new THREE.TubeGeometry(curve, Math.max(12, points.length * 5), radius, 6, closed), material);
+}
+
+function patch(parent, points, material) {
+  const geometry = new THREE.BufferGeometry();
+  const indices = [];
+  for (let i = 1; i < points.length - 1; i++) indices.push(0, i, i + 1);
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return mesh(parent, geometry, material);
+}
+
+function ellipseRing(parent, material, y, rx, rz, radius = 0.009) {
+  const points = [];
+  for (let i = 0; i < 40; i++) {
+    const a = i / 40 * TAU;
+    points.push([Math.sin(a) * rx, y, Math.cos(a) * rz]);
+  }
+  return line(parent, points, material, radius, true);
+}
+
+function fabricTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#b8b8b8';
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 128; i += 4) {
+    ctx.fillStyle = i % 8 ? '#b3b3b3' : '#c5c5c5';
+    ctx.fillRect(i, 0, 1, 128);
+    ctx.fillRect(0, i, 128, 1);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 5);
+  return texture;
+}
+
+function shadowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(36,31,55,.29)');
+  gradient.addColorStop(0.45, 'rgba(36,31,55,.13)');
+  gradient.addColorStop(1, 'rgba(36,31,55,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function hairShell() {
+  const positions = [], indices = [];
+  const around = 56, down = 24;
+  for (let j = 0; j <= down; j++) {
+    for (let i = 0; i <= around; i++) {
+      const angle = i / around * TAU;
+      // Open forehead and face, while retaining a full bob at the back.
+      const end = 2.3 - 1.3 * Math.max(0, Math.cos(angle)) ** 4;
+      const theta = (j / down) * end;
+      positions.push(
+        Math.sin(angle) * Math.sin(theta) * 0.216,
+        Math.cos(theta) * 0.285 + 0.027,
+        Math.cos(angle) * Math.sin(theta) * 0.203 - 0.022,
+      );
+      if (i < around && j < down) {
+        const a = j * (around + 1) + i, b = a + around + 1;
+        indices.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export class AvatarStage {
+  constructor(container) {
+    this.container = container;
+    this.motion = 'idle';
+    this.paused = false;
+    this.elapsed = 0;
+    this.footPoint = new THREE.Vector3();
+    this.look = {
+      category: 'clothing', garment: 'jacket', color: '#a499c6',
+      shoe: 'sneakers', accessory: 'earrings', makeup: '#b65f73',
+      skin: '#d6a586', body: 1, showGarment: true, makeupIntensity: 0.45,
+    };
+    this.disposed = false;
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog('#edf1e6', 10, 23);
+    this.camera = new THREE.PerspectiveCamera(33, 1, 0.1, 40);
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: true, alpha: true, preserveDrawingBuffer: true,
+        powerPreference: 'high-performance',
+      });
+    } catch (error) {
+      const notice = document.createElement('div');
+      notice.className = 'stage-fallback';
+      notice.style.cssText = 'padding:36px;line-height:1.8;color:#655974;text-align:center';
+      notice.textContent = '当前浏览器无法启动 3D 预览。请开启浏览器硬件加速，或使用支持 WebGL 的 Chrome / Edge。';
+      notice.setAttribute('role', 'status');
+      container.appendChild(notice);
+      this.fallback = notice;
+      console.warn('AvatarStage WebGL unavailable:', error);
+      return;
+    }
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    const canvas = this.renderer.domElement;
+    canvas.style.cssText = 'width:100%;height:100%;display:block;touch-action:none;outline:none';
+    canvas.setAttribute('aria-label', '可旋转的动态 3D 试穿模型。拖动旋转，滚轮缩放。');
+    canvas.tabIndex = 0;
+    container.appendChild(canvas);
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.075;
+    this.controls.enablePan = false;
+    this.controls.minDistance = 3.6;
+    this.controls.maxDistance = 10.5;
+    this.controls.minPolarAngle = 0.75;
+    this.controls.maxPolarAngle = 1.7;
+    this.controls.rotateSpeed = 0.65;
+    this.resetCamera();
+    this.buildLighting();
+    this.buildStage();
+    this.buildAvatar();
+    this.setLook(this.look);
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(container);
+    this.resize();
+    // Start the clock from the first animation callback. In a slow frame rAF's
+    // timestamp can precede performance.now() at the end of mesh construction.
+    this.lastTime = null;
+    this.tick = this.tick.bind(this);
+    this.frame = requestAnimationFrame(this.tick);
+    this.contextLost = event => {
+      event.preventDefault();
+      this.paused = true;
+      container.dispatchEvent(new CustomEvent('stageerror', { detail: '3D 渲染连接中断，请刷新页面重试。' }));
+    };
+    canvas.addEventListener('webglcontextlost', this.contextLost);
+  }
+
+  buildLighting() {
+    this.scene.add(new THREE.HemisphereLight('#ffffff', '#c5cbb7', 2.3));
+    const key = new THREE.DirectionalLight('#fff4e8', 3.5);
+    key.position.set(-3, 6, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.camera.left = key.shadow.camera.bottom = -3;
+    key.shadow.camera.right = key.shadow.camera.top = 3;
+    key.shadow.camera.far = 15;
+    key.shadow.normalBias = 0.025;
+    key.shadow.bias = -0.0002;
+    key.shadow.radius = 5;
+    this.scene.add(key);
+    const fill = new THREE.DirectionalLight('#e5eddb', 1.1);
+    fill.position.set(4, 3, 2);
+    this.scene.add(fill);
+    const rim = new THREE.DirectionalLight('#ffffff', 2);
+    rim.position.set(1, 5, -3);
+    this.scene.add(rim);
+  }
+
+  buildStage() {
+    this.platform = mesh(this.scene,
+      new THREE.CylinderGeometry(1.14, 1.17, 0.09, 80),
+      mat('#f7f6ee', { roughness: 0.5 }), [0, -0.055, 0]);
+    this.platform.castShadow = false;
+    const ring = mesh(this.scene, new THREE.TorusGeometry(1.13, 0.008, 8, 96),
+      mat('#b8c7a4', { metalness: 0.1, roughness: 0.4 }), [0, -0.005, 0]);
+    ring.rotation.x = Math.PI / 2;
+    const shadow = mesh(this.scene, new THREE.PlaneGeometry(2.5, 2.2),
+      new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false }),
+      [0, 0.002, 0]);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.castShadow = shadow.receiveShadow = false;
+    this.floor = mesh(this.scene, new THREE.PlaneGeometry(60, 60),
+      new THREE.ShadowMaterial({ color: '#8f9f80', opacity: 0.16 }), [0, -0.102, 0]);
+    this.floor.rotation.x = -Math.PI / 2;
+    this.floor.castShadow = false;
+    // Minimal markings belong to the turntable and remain fixed during motion.
+    const marking = mat('#c0c9b4');
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      line(this.scene, [
+        [Math.sin(angle) * 0.98, 0.002, Math.cos(angle) * 0.98],
+        [Math.sin(angle) * 1.04, 0.002, Math.cos(angle) * 1.04],
+      ], marking, 0.004);
+    }
+  }
+
+  buildAvatar() {
+    this.materials = {
+      skin: mat(this.look.skin, { roughness: 0.78 }),
+      fabric: mat(this.look.color, { roughness: 0.86, bumpMap: fabricTexture(), bumpScale: 0.004, side: THREE.DoubleSide }),
+      lapel: mat('#b5a9d3', { roughness: 0.8, side: THREE.DoubleSide }),
+      dark: mat('#30303b', { roughness: 0.88 }),
+      inner: mat('#f6f1e9', { roughness: 0.9, side: THREE.DoubleSide }),
+      sole: mat('#dedce4', { roughness: 0.72 }),
+      shoe: mat('#f9f7f1', { roughness: 0.57 }),
+      boot: mat('#3d3445', { roughness: 0.45 }),
+      hair: mat('#342a2c', { roughness: 0.76 }),
+      hairLight: mat('#51403d', { roughness: 0.75 }),
+      gold: mat('#d6b777', { roughness: 0.28, metalness: 0.72 }),
+      lips: mat(this.look.makeup, { roughness: 0.48 }),
+      eyeWhite: mat('#fff8f1'),
+      iris: mat('#4d3b34', { roughness: 0.4 }),
+      pupil: mat('#231e23', { roughness: 0.42 }),
+    };
+    const m = this.materials;
+    this.avatar = group(this.scene);
+    this.avatar.rotation.y = -0.06;
+    this.avatar.position.y = -0.075;
+    this.hips = group(this.avatar, [0, 1.68, 0]);
+    oval(this.hips, m.skin, [0, 0.06, 0], [0.275, 0.23, 0.175]);
+    this.spine = group(this.hips, [0, 0.14, 0]);
+    mesh(this.spine, loft([
+      [0, 0.265, 0.168], [0.15, 0.22, 0.145], [0.34, 0.205, 0.135],
+      [0.53, 0.27, 0.18], [0.67, 0.29, 0.17], [0.77, 0.295, 0.145],
+      [0.85, 0.19, 0.13], [0.91, 0.102, 0.09],
+    ]), m.skin);
+    mesh(this.spine, new THREE.CylinderGeometry(0.09, 0.105, 0.2, 24), m.skin, [0, 0.94, 0]);
+    this.head = group(this.spine, [0, 1.19, 0.002]);
+    this.buildHead();
+    this.arms = [];
+    this.legs = [];
+    for (const side of [-1, 1]) {
+      this.arms.push(this.buildArm(side));
+      this.legs.push(this.buildLeg(side));
+    }
+    this.clothing = group(this.spine);
+    this.buildClothes();
+    this.buildAccessories();
+  }
+
+  buildHead() {
+    const m = this.materials;
+    oval(this.head, m.skin, [0, 0, 0], [0.197, 0.273, 0.185], 40);
+    oval(this.head, m.skin, [0, -0.14, 0.02], [0.147, 0.13, 0.148]);
+    this.faceDetails = group(this.head);
+    for (const side of [-1, 1]) {
+      oval(this.head, m.skin, [side * 0.188, -0.032, 0], [0.033, 0.06, 0.029]);
+      const x = side * 0.073;
+      oval(this.faceDetails, m.eyeWhite, [x, 0.025, 0.163], [0.043, 0.016, 0.013]);
+      oval(this.faceDetails, m.iris, [x, 0.026, 0.175], [0.013, 0.014, 0.004], 18);
+      oval(this.faceDetails, m.pupil, [x, 0.026, 0.178], [0.006, 0.008, 0.002], 12);
+      oval(this.faceDetails, m.eyeWhite, [x - 0.004, 0.031, 0.18], [0.003, 0.004, 0.0015], 10);
+      line(this.faceDetails, [
+        [x - 0.043, 0.025, 0.164], [x - 0.022, 0.041, 0.174],
+        [x + 0.016, 0.042, 0.175], [x + 0.044, 0.027, 0.164],
+      ], m.hair, 0.0034);
+      line(this.faceDetails, [
+        [x - 0.043, 0.078, 0.161], [x - 0.012, 0.088, 0.176], [x + 0.034, 0.077, 0.167],
+      ], m.hair, 0.006);
+    }
+    oval(this.faceDetails, m.skin, [0, -0.014, 0.18], [0.023, 0.057, 0.028]);
+    oval(this.faceDetails, m.skin, [0, -0.051, 0.199], [0.031, 0.019, 0.023]);
+    this.lipTop = line(this.faceDetails, [
+      [-0.047, -0.112, 0.163], [-0.023, -0.108, 0.176],
+      [0, -0.114, 0.182], [0.023, -0.108, 0.176], [0.047, -0.112, 0.163],
+    ], m.lips, 0.0075);
+    this.lipBottom = line(this.faceDetails, [
+      [-0.045, -0.115, 0.164], [0, -0.125, 0.178], [0.045, -0.115, 0.164],
+    ], m.lips, 0.008);
+    // Short sculpted bob: rear shell leaves the face unobscured.
+    mesh(this.head, hairShell(), m.hair);
+    for (const side of [-1, 1]) {
+      oval(this.head, m.hair, [side * 0.173, -0.042, -0.064], [0.066, 0.235, 0.142]);
+      line(this.head, [
+        [side * 0.014, 0.273, 0.025], [side * 0.108, 0.241, 0.114],
+        [side * 0.175, 0.14, 0.129], [side * 0.202, -0.025, 0.071],
+        [side * 0.183, -0.204, -0.014],
+      ], m.hair, 0.035);
+      for (let i = 0; i < 3; i++) {
+        line(this.head, [
+          [side * (0.055 + i * 0.026), 0.25 - i * 0.01, 0.098],
+          [side * (0.173 + i * 0.009), 0.11, 0.104 - i * 0.027],
+          [side * (0.19 + i * 0.009), -0.13, 0.025 - i * 0.028],
+        ], m.hairLight, 0.0025);
+      }
+    }
+    this.photoFace = null;
+  }
+
+  buildArm(side) {
+    const m = this.materials;
+    const shoulder = group(this.spine, [side * 0.306, 0.74, 0]);
+    oval(shoulder, m.skin, [0, -0.05, 0], [0.102, 0.13, 0.105]);
+    mesh(shoulder, loft([
+      [-0.45, 0.062, 0.065], [-0.35, 0.07, 0.071], [-0.19, 0.082, 0.083], [-0.02, 0.095, 0.097],
+    ], 28), m.skin);
+    const elbow = group(shoulder, [0, -0.44, 0]);
+    oval(elbow, m.skin, [0, 0, 0], [0.063, 0.07, 0.065]);
+    mesh(elbow, loft([
+      [-0.39, 0.041, 0.04], [-0.30, 0.045, 0.043],
+      [-0.14, 0.062, 0.059], [-0.025, 0.06, 0.061],
+    ], 28), m.skin);
+    const hand = group(elbow, [0, -0.4, 0]);
+    oval(hand, m.skin, [0, -0.065, 0.006], [0.048, 0.083, 0.026]);
+    for (let i = 0; i < 4; i++) {
+      const x = (i - 1.5) * 0.022;
+      const length = [0.079, 0.099, 0.093, 0.068][i];
+      const finger = oval(hand, m.skin, [x, -0.125 - length * 0.28, 0.012], [0.011, length * 0.55, 0.013], 12);
+      finger.rotation.z = -(i - 1.5) * 0.045;
+    }
+    const thumb = oval(hand, m.skin, [-side * 0.045, -0.057, 0.029], [0.019, 0.054, 0.02], 14);
+    thumb.rotation.z = -side * 0.48;
+    const sleeve = mesh(shoulder, loft([
+      [-0.445, 0.078, 0.081], [-0.3, 0.093, 0.092], [-0.12, 0.112, 0.112],
+      [0.015, 0.106, 0.108], [0.065, 0.065, 0.065],
+    ], 32), m.fabric);
+    const sleeveLower = mesh(elbow, loft([
+      [-0.355, 0.06, 0.059], [-0.17, 0.076, 0.073], [0.018, 0.078, 0.081],
+    ], 32), m.fabric);
+    const shortSleeve = mesh(shoulder, loft([
+      [-0.22, 0.109, 0.109], [-0.08, 0.117, 0.116],
+      [0.015, 0.108, 0.11], [0.065, 0.063, 0.065],
+    ], 32), m.fabric);
+    const cuff = ellipseRing(elbow, m.lapel, -0.35, 0.061, 0.06, 0.009);
+    const button = oval(elbow, m.gold, [side * 0.065, -0.30, 0.01], [0.009, 0.009, 0.005], 12);
+    shoulder.rotation.z = side * 0.10;
+    return { side, shoulder, elbow, hand, sleeve, sleeveLower, shortSleeve, cuff, button };
+  }
+
+  buildLeg(side) {
+    const m = this.materials;
+    const hip = group(this.hips, [side * 0.14, -0.03, 0]);
+    mesh(hip, loft([
+      [-0.75, 0.079, 0.089], [-0.61, 0.098, 0.102], [-0.33, 0.123, 0.134],
+      [-0.1, 0.144, 0.146], [0.055, 0.145, 0.135],
+    ], 32), m.skin);
+    const knee = group(hip, [0, -0.73, 0]);
+    oval(knee, m.skin, [0, 0, 0.005], [0.082, 0.085, 0.09]);
+    mesh(knee, loft([
+      [-0.74, 0.045, 0.055], [-0.59, 0.052, 0.059], [-0.34, 0.079, 0.089],
+      [-0.19, 0.085, 0.096], [-0.01, 0.077, 0.081],
+    ], 32), m.skin);
+    const foot = group(knee, [0, -0.75, 0]);
+    oval(foot, m.skin, [0, -0.03, 0.07], [0.065, 0.061, 0.14]);
+    const pantsTop = mesh(hip, loft([
+      [-0.76, 0.091, 0.10], [-0.5, 0.114, 0.12],
+      [-0.15, 0.153, 0.155], [0.06, 0.152, 0.15],
+    ], 32), m.dark);
+    const pantsBottom = mesh(knee, loft([
+      [-0.68, 0.075, 0.072], [-0.5, 0.078, 0.08], [-0.23, 0.093, 0.10],
+      [0.025, 0.092, 0.102],
+    ], 32), m.dark);
+    const sneakers = group(foot);
+    oval(sneakers, m.sole, [0, -0.06, 0.07], [0.09, 0.037, 0.18]);
+    oval(sneakers, m.shoe, [0, -0.015, 0.065], [0.088, 0.061, 0.169]);
+    oval(sneakers, m.shoe, [0, 0.02, 0.004], [0.074, 0.071, 0.08]);
+    for (let j = 0; j < 4; j++) {
+      line(sneakers, [[-0.035, 0.047 - j * 0.006, 0.048 + j * 0.022], [0.035, 0.047 - j * 0.006, 0.048 + j * 0.022]], m.inner, 0.0045);
+    }
+    line(sneakers, [[side * 0.08, 0.004, -0.005], [side * 0.09, -0.005, 0.045], [side * 0.08, -0.012, 0.098]], m.fabric, 0.01);
+    const boots = group(foot);
+    oval(boots, m.boot, [0, -0.021, 0.075], [0.085, 0.072, 0.182]);
+    oval(boots, m.dark, [0, -0.07, 0.085], [0.089, 0.027, 0.18]);
+    mesh(boots, loft([
+      [-0.01, 0.075, 0.084], [0.09, 0.068, 0.076], [0.28, 0.087, 0.097],
+      [0.39, 0.091, 0.103],
+    ], 32), m.boot);
+    ellipseRing(boots, m.gold, 0.375, 0.093, 0.105, 0.005);
+    const heel = mesh(boots, new THREE.CylinderGeometry(0.048, 0.043, 0.06, 16), m.dark, [0, -0.065, -0.035]);
+    return { side, hip, knee, foot, pantsTop, pantsBottom, sneakers, boots, heel };
+  }
+
+  buildClothes() {
+    const m = this.materials;
+    this.baseLayer = group(this.clothing);
+    mesh(this.baseLayer, loft([
+      [0.02, 0.27, 0.174], [0.19, 0.228, 0.153], [0.36, 0.216, 0.147],
+      [0.53, 0.281, 0.189], [0.68, 0.298, 0.179],
+      [0.78, 0.254, 0.151], [0.85, 0.115, 0.101],
+    ]), m.inner);
+    this.jacket = group(this.clothing);
+    mesh(this.jacket, loft([
+      [-0.17, 0.30, 0.20], [-0.08, 0.295, 0.196], [0.15, 0.249, 0.171],
+      [0.34, 0.239, 0.163], [0.55, 0.289, 0.193],
+      [0.72, 0.312, 0.18], [0.79, 0.284, 0.155], [0.85, 0.13, 0.112],
+    ]), m.fabric);
+    patch(this.jacket, [
+      [-0.092, 0.85, 0.12], [0.092, 0.85, 0.12], [0.114, 0.59, 0.199],
+      [0, 0.23, 0.178], [-0.114, 0.59, 0.199],
+    ], m.inner);
+    for (const side of [-1, 1]) {
+      patch(this.jacket, [
+        [side * 0.10, 0.85, 0.125], [side * 0.235, 0.73, 0.153],
+        [side * 0.16, 0.62, 0.2], [side * 0.195, 0.55, 0.202],
+        [side * 0.014, 0.25, 0.186],
+      ], m.lapel);
+      line(this.jacket, [
+        [side * 0.1, 0.85, 0.131], [side * 0.12, 0.63, 0.206],
+        [side * 0.014, 0.25, 0.19],
+      ], m.fabric, 0.006);
+      line(this.jacket, [
+        [side * 0.12, 0.025, 0.19], [side * 0.245, 0.045, 0.143],
+      ], m.lapel, 0.012);
+    }
+    oval(this.jacket, m.gold, [0.034, 0.22, 0.181], [0.014, 0.014, 0.008], 14);
+    line(this.jacket, [[0, 0.20, 0.182], [0, -0.14, 0.203]], m.lapel, 0.003);
+
+    this.shirt = group(this.clothing);
+    mesh(this.shirt, loft([
+      [0.02, 0.271, 0.181], [0.15, 0.242, 0.167], [0.36, 0.23, 0.155],
+      [0.54, 0.291, 0.195], [0.72, 0.307, 0.178], [0.80, 0.263, 0.15],
+      [0.86, 0.12, 0.10],
+    ]), m.fabric);
+    ellipseRing(this.shirt, m.lapel, 0.86, 0.121, 0.102, 0.013);
+    ellipseRing(this.shirt, m.lapel, 0.034, 0.271, 0.18, 0.008);
+    for (let i = 0; i < 3; i++) {
+      line(this.shirt, [[-0.135 + i * 0.045, 0.74, 0.171], [-0.13 + i * 0.045, 0.57, 0.197]], m.lapel, 0.002);
+    }
+
+    this.dress = group(this.clothing);
+    this.dressTop = mesh(this.dress, loft([
+      [0.12, 0.248, 0.173], [0.3, 0.225, 0.15], [0.52, 0.286, 0.195],
+      [0.69, 0.302, 0.18], [0.79, 0.245, 0.148], [0.85, 0.125, 0.101],
+    ]), m.fabric);
+    this.skirt = mesh(this.dress, loft([
+      [-0.62, 0.44, 0.29], [-0.52, 0.422, 0.28], [-0.26, 0.355, 0.239],
+      [-0.04, 0.299, 0.21], [0.13, 0.245, 0.174], [0.25, 0.229, 0.156],
+    ], 64, 4, 0.028), m.fabric);
+    ellipseRing(this.dress, m.lapel, -0.60, 0.439, 0.29, 0.008);
+    ellipseRing(this.dress, m.lapel, 0.23, 0.234, 0.162, 0.016);
+    oval(this.dress, m.gold, [0, 0.23, 0.179], [0.027, 0.022, 0.008]);
+    ellipseRing(this.dress, m.lapel, 0.85, 0.126, 0.103, 0.009);
+    this.pantsWaist = mesh(this.hips, loft([
+      [-0.07, 0.285, 0.185], [0.1, 0.284, 0.185], [0.22, 0.265, 0.173],
+    ]), m.dark);
+    this.pantsSeat = oval(this.hips, m.dark, [0, -0.015, 0], [0.281, 0.21, 0.188]);
+    this.belt = ellipseRing(this.hips, m.boot, 0.215, 0.268, 0.176, 0.017);
+    this.buckle = oval(this.hips, m.gold, [0, 0.215, 0.194], [0.034, 0.022, 0.008], 16);
+  }
+
+  buildAccessories() {
+    const m = this.materials;
+    this.accessories = {};
+    this.accessories.earrings = group(this.head);
+    for (const side of [-1, 1]) {
+      oval(this.accessories.earrings, m.gold, [side * 0.202, -0.068, 0.033], [0.012, 0.016, 0.013], 16);
+      const hoop = mesh(this.accessories.earrings, new THREE.TorusGeometry(0.045, 0.007, 8, 36), m.gold,
+        [side * 0.208, -0.12, 0.03]);
+      hoop.scale.x = 0.72;
+    }
+    this.accessories.necklace = group(this.spine);
+    const points = [];
+    for (let i = 0; i < 42; i++) {
+      const a = i / 42 * TAU;
+      points.push([Math.sin(a) * 0.115, 0.867 - Math.max(0, Math.cos(a)) * 0.18, Math.cos(a) * 0.156]);
+    }
+    line(this.accessories.necklace, points, m.gold, 0.005, true);
+    oval(this.accessories.necklace, m.gold, [0, 0.68, 0.17], [0.022, 0.032, 0.009], 16);
+    this.accessories.glasses = group(this.head);
+    const glassMat = mat('#75678d', { transparent: true, opacity: 0.16, roughness: 0.1, depthWrite: false });
+    for (const side of [-1, 1]) {
+      const lens = oval(this.accessories.glasses, glassMat, [side * 0.078, 0.029, 0.198], [0.064, 0.046, 0.007]);
+      lens.castShadow = false;
+      const rim = mesh(this.accessories.glasses, new THREE.TorusGeometry(0.052, 0.005, 8, 40), m.gold, [side * 0.078, 0.029, 0.201]);
+      rim.scale.set(1.22, 0.85, 1);
+      line(this.accessories.glasses, [[side * 0.14, 0.04, 0.2], [side * 0.195, 0.04, 0.08], [side * 0.196, 0.015, -0.01]], m.gold, 0.005);
+    }
+    line(this.accessories.glasses, [[-0.019, 0.035, 0.202], [0, 0.048, 0.213], [0.019, 0.035, 0.202]], m.gold, 0.0045);
+  }
+
+  setLook(update = {}) {
+    this.look = { ...this.look, ...update };
+    if (!this.avatar) return;
+    const { garment, color, skin, shoe, accessory, makeup, body, showGarment, makeupIntensity } = this.look;
+    const m = this.materials;
+    if (color && /^#[\da-f]{3,8}$/i.test(color)) {
+      m.fabric.color.set(color);
+      m.lapel.color.copy(m.fabric.color).lerp(new THREE.Color('#ffffff'), 0.16);
+    }
+    if (skin && /^#[\da-f]{3,8}$/i.test(skin)) m.skin.color.set(skin);
+    if (makeup && /^#[\da-f]{3,8}$/i.test(makeup)) {
+      m.lips.color.set('#bb8177').lerp(new THREE.Color(makeup), clamp(Number(makeupIntensity) || 0, 0, 1));
+    }
+    const dressed = showGarment !== false;
+    this.baseLayer.visible = !dressed;
+    this.jacket.visible = dressed && garment === 'jacket';
+    this.shirt.visible = dressed && garment === 'shirt';
+    this.dress.visible = dressed && garment === 'dress';
+    this.pantsWaist.visible = this.pantsSeat.visible = this.belt.visible = this.buckle.visible = !dressed || garment !== 'dress';
+    for (const arm of this.arms) {
+      arm.sleeve.visible = arm.sleeveLower.visible = arm.cuff.visible = arm.button.visible = dressed && garment === 'jacket';
+      arm.shortSleeve.visible = dressed && (garment === 'shirt' || garment === 'dress');
+    }
+    for (const leg of this.legs) {
+      leg.pantsTop.visible = leg.pantsBottom.visible = !dressed || garment !== 'dress';
+      leg.sneakers.visible = shoe !== 'boots';
+      leg.boots.visible = shoe === 'boots';
+    }
+    for (const [name, object] of Object.entries(this.accessories)) object.visible = name === accessory;
+    // Body controls are illustrative proportions; never inferred measurements.
+    let width = typeof body === 'number' ? body : body?.width ?? 1;
+    let height = typeof body === 'object' ? body?.height ?? 1 : 1;
+    if (typeof body === 'string') width = ({ slim: 0.91, regular: 1, standard: 1, curvy: 1.12 })[body] || 1;
+    width = clamp(Number(width) || 1, 0.82, 1.24);
+    height = clamp(Number(height) || 1, 0.9, 1.1);
+    this.avatar.scale.set(width, height, 0.5 + width * 0.5);
+    this.animatePose(this.elapsed, 0);
+  }
+
+  setMotion(motion) {
+    this.motion = ['idle', 'walk', 'wave', 'turn'].includes(motion) ? motion : 'idle';
+    this.elapsed = 0;
+  }
+
+  setPaused(paused) {
+    this.paused = Boolean(paused);
+  }
+
+  setPhoto(image, landmarks = null) {
+    if (!this.head || !image) return false;
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    if (!imageWidth || !imageHeight) return false;
+    // Face landmarks are normalized coordinates. Pose landmarks may also supply
+    // a face region, while an unlocalized photo never becomes a fabricated face.
+    const points = landmarks?.faceLandmarks?.[0] || landmarks?.landmarks?.[0] || landmarks;
+    if (!Array.isArray(points) || points.length < 5) return false;
+    const facePoints = points.length >= 400
+      ? [points[10], points[152], points[234], points[454]]
+      : points.slice(0, 11);
+    if (facePoints.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return false;
+    const xs = facePoints.map(p => p.x * imageWidth), ys = facePoints.map(p => p.y * imageHeight);
+    let width = Math.max(...xs) - Math.min(...xs);
+    let height = Math.max(...ys) - Math.min(...ys);
+    if (width < 8 || height < 8) return false;
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    if (points.length < 400) { width *= 1.24; height = Math.max(height * 1.75, width * 1.35); }
+    else { width *= 1.08; height *= 1.06; }
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 320;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, centerX - width / 2, centerY - height / 2, width, height, 0, 0, 256, 320);
+    ctx.globalCompositeOperation = 'destination-in';
+    const mask = ctx.createRadialGradient(128, 154, 56, 128, 154, 148);
+    mask.addColorStop(0, 'rgba(255,255,255,1)');
+    mask.addColorStop(0.62, 'rgba(255,255,255,1)');
+    mask.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = mask;
+    ctx.fillRect(0, 0, 256, 320);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    if (this.photoFace) {
+      this.photoFace.material.map.dispose();
+      this.photoFace.material.map = texture;
+      this.photoFace.material.needsUpdate = true;
+    } else {
+      const positions = [], uvs = [], indices = [];
+      const nx = 24, ny = 30;
+      for (let j = 0; j <= ny; j++) {
+        for (let i = 0; i <= nx; i++) {
+          const x = (i / nx - 0.5) * 0.36;
+          const y = (0.5 - j / ny) * 0.44 - 0.017;
+          const z = 0.192 * Math.sqrt(Math.max(0.04, 1 - (x / 0.205) ** 2 - (y / 0.285) ** 2)) + 0.018;
+          positions.push(x, y, z);
+          uvs.push(i / nx, 1 - j / ny);
+          if (i < nx && j < ny) {
+            const a = j * (nx + 1) + i, b = a + nx + 1;
+            indices.push(a, b, a + 1, a + 1, b, b + 1);
+          }
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      this.photoFace = mesh(this.head, geometry, mat('#ffffff', {
+        map: texture, transparent: true, roughness: 0.9, depthWrite: false,
+      }));
+      this.photoFace.castShadow = false;
+    }
+    this.faceDetails.visible = false;
+    return true;
+  }
+
+  resetCamera() {
+    this.camera?.position.set(3.15, 2.45, 7.7);
+    this.controls?.target.set(0, 1.65, 0);
+    this.controls?.update();
+  }
+
+  resize() {
+    if (!this.renderer || this.disposed) return;
+    const { width, height } = this.container.getBoundingClientRect();
+    this.visible = width > 0 && height > 0;
+    if (!width || !height) return;
+    this.camera.aspect = width / height;
+    // Portrait/mobile canvases need a slightly wider field of view.
+    this.camera.fov = width / height < 0.65 ? 39 : 33;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height, false);
+  }
+
+  animatePose(t, delta) {
+    delta = clamp(Number.isFinite(delta) ? delta : 0, 0, 0.05);
+    const walk = this.motion === 'walk';
+    const wave = this.motion === 'wave';
+    const turn = this.motion === 'turn';
+    const pace = t * 3.6;
+    const lerp = 1 - Math.exp(-delta * 9);
+    const approach = (object, axis, value) => {
+      object.rotation[axis] = THREE.MathUtils.lerp(object.rotation[axis], value, lerp);
+    };
+    const bob = walk ? Math.abs(Math.sin(pace)) * 0.028 : Math.sin(t * 1.65) * 0.006;
+    this.hips.position.y = 1.68 + bob;
+    approach(this.hips, 'z', walk ? Math.sin(pace) * 0.035 : Math.sin(t * 0.8) * 0.013);
+    approach(this.spine, 'y', walk ? Math.sin(pace) * 0.055 : Math.sin(t * 0.55) * 0.035);
+    approach(this.spine, 'z', walk ? -Math.sin(pace) * 0.025 : -0.012);
+    approach(this.head, 'y', wave ? -0.12 : Math.sin(t * 0.42) * 0.07);
+    approach(this.head, 'z', wave ? -0.05 : Math.sin(t * 0.6) * 0.025);
+    if (turn) this.avatar.rotation.y += delta * 0.45;
+    else {
+      // Return along the shortest route after the 360 degree turntable mode.
+      const angle = Math.atan2(Math.sin(this.avatar.rotation.y + 0.06), Math.cos(this.avatar.rotation.y + 0.06));
+      this.avatar.rotation.y -= angle * lerp;
+    }
+    for (const arm of this.arms) {
+      const phase = arm.side === 1 ? 0 : Math.PI;
+      const waving = wave && arm.side === -1;
+      approach(arm.shoulder, 'x', walk ? Math.sin(pace + phase) * 0.32 : waving ? -0.15 : -0.025);
+      approach(arm.shoulder, 'z', waving ? -1.1 : arm.side * (0.105 + Math.sin(t * 1.1) * 0.014));
+      approach(arm.elbow, 'x', walk ? -0.13 - Math.max(0, Math.sin(pace + phase)) * 0.15 : waving ? -0.18 : -0.10);
+      approach(arm.elbow, 'z', waving ? -1.18 - Math.sin(t * 5) * 0.19 : 0);
+      approach(arm.hand, 'z', waving ? Math.sin(t * 5) * 0.22 : 0);
+    }
+    for (const leg of this.legs) {
+      const phase = leg.side === 1 ? Math.PI : 0;
+      const swing = Math.sin(pace + phase);
+      approach(leg.hip, 'x', walk ? swing * 0.32 : leg.side === 1 ? -0.025 : 0.03);
+      approach(leg.hip, 'z', leg.side * 0.018);
+      approach(leg.knee, 'x', walk ? Math.max(0, -swing) * 0.57 : leg.side === 1 ? 0.025 : 0.045);
+      approach(leg.foot, 'x', walk ? Math.max(0, -swing) * -0.17 : 0);
+    }
+    this.skirt.rotation.x = walk ? Math.sin(pace) * 0.035 : 0;
+    this.skirt.rotation.z = walk ? Math.sin(pace) * 0.025 : 0;
+    // Ground the planted sole after joint motion and changes to body height.
+    // Measuring three sole points also handles toe-off without a sinking heel.
+    this.avatar.position.y = 0;
+    this.avatar.updateMatrixWorld(true);
+    let lowest = Infinity;
+    for (const leg of this.legs) {
+      for (const z of [-0.035, 0.07, 0.18]) {
+        this.footPoint.set(0, -0.092, z).applyMatrix4(leg.foot.matrixWorld);
+        lowest = Math.min(lowest, this.footPoint.y);
+      }
+    }
+    this.avatar.position.y = 0.004 - lowest;
+  }
+
+  tick(now) {
+    if (this.disposed) return;
+    const delta = this.lastTime === null ? 0 : clamp((now - this.lastTime) / 1000, 0, 0.05);
+    this.lastTime = now;
+    if (!this.visible || document.hidden) {
+      this.frame = requestAnimationFrame(this.tick);
+      return;
+    }
+    if (!this.paused) {
+      this.elapsed += delta;
+      this.animatePose(this.elapsed, delta);
+    }
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+    this.frame = requestAnimationFrame(this.tick);
+  }
+
+  capture() {
+    if (!this.renderer) return null;
+    this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL('image/png');
+  }
+
+  dispose() {
+    this.disposed = true;
+    cancelAnimationFrame(this.frame);
+    this.resizeObserver?.disconnect();
+    this.controls?.dispose();
+    const geometries = new Set(), materials = new Set(), textures = new Set();
+    this.scene?.traverse(object => {
+      if (object.geometry) geometries.add(object.geometry);
+      if (object.material) {
+        const list = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of list) {
+          materials.add(material);
+          for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
+        }
+      }
+    });
+    for (const texture of textures) texture.dispose();
+    for (const material of materials) material.dispose();
+    for (const geometry of geometries) geometry.dispose();
+    if (this.renderer) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.contextLost);
+      this.renderer.dispose();
+      this.renderer.domElement.remove();
+    }
+    this.fallback?.remove();
+  }
+}

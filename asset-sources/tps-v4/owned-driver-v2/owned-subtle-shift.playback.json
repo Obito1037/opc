@@ -1,0 +1,126 @@
+{
+  "passed": true,
+  "duration": 3,
+  "width": 256,
+  "height": 256,
+  "currentTime": 3,
+  "ended": true,
+  "error": null,
+  "elapsedMilliseconds": 3014.1000003814697,
+  "frames": [
+    {
+      "mediaTime": 0.125,
+      "presentedFrames": 2,
+      "now": 238.6
+    },
+    {
+      "mediaTime": 0.375,
+      "presentedFrames": 3,
+      "now": 363.6
+    },
+    {
+      "mediaTime": 0.5,
+      "presentedFrames": 4,
+      "now": 488.6
+    },
+    {
+      "mediaTime": 0.625,
+      "presentedFrames": 5,
+      "now": 613.5
+    },
+    {
+      "mediaTime": 0.75,
+      "presentedFrames": 6,
+      "now": 738.5
+    },
+    {
+      "mediaTime": 0.875,
+      "presentedFrames": 7,
+      "now": 863.6
+    },
+    {
+      "mediaTime": 1,
+      "presentedFrames": 8,
+      "now": 988.6
+    },
+    {
+      "mediaTime": 1.125,
+      "presentedFrames": 9,
+      "now": 1113.5
+    },
+    {
+      "mediaTime": 1.25,
+      "presentedFrames": 10,
+      "now": 1238.5
+    },
+    {
+      "mediaTime": 1.375,
+      "presentedFrames": 11,
+      "now": 1363.6
+    },
+    {
+      "mediaTime": 1.5,
+      "presentedFrames": 12,
+      "now": 1488.6
+    },
+    {
+      "mediaTime": 1.625,
+      "presentedFrames": 13,
+      "now": 1613.6
+    },
+    {
+      "mediaTime": 1.75,
+      "presentedFrames": 14,
+      "now": 1738.6
+    },
+    {
+      "mediaTime": 1.875,
+      "presentedFrames": 15,
+      "now": 1863.5
+    },
+    {
+      "mediaTime": 2,
+      "presentedFrames": 16,
+      "now": 1988.7
+    },
+    {
+      "mediaTime": 2.125,
+      "presentedFrames": 17,
+      "now": 2113.7
+    },
+    {
+      "mediaTime": 2.25,
+      "presentedFrames": 18,
+      "now": 2238.5
+    },
+    {
+      "mediaTime": 2.375,
+      "presentedFrames": 19,
+      "now": 2363.6
+    },
+    {
+      "mediaTime": 2.5,
+      "presentedFrames": 20,
+      "now": 2488.6
+    },
+    {
+      "mediaTime": 2.625,
+      "presentedFrames": 21,
+      "now": 2613.6
+    },
+    {
+      "mediaTime": 2.75,
+      "presentedFrames": 22,
+      "now": 2738.6
+    },
+    {
+      "mediaTime": 2.875,
+      "presentedFrames": 23,
+      "now": 2863.7
+    }
+  ],
+  "quality": {
+    "totalVideoFrames": 24,
+    "droppedVideoFrames": 1
+  }
+}

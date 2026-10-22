@@ -1,0 +1,21 @@
+node_modules/
+dist/
+test-results/
+scripts/research-v4/results/
+runtime/
+scripts/**/.venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+
+# Machine-local diagnostics and editor backups.
+kernel.errors.txt
+*.log
+*.blend1
+*.py[cod]
+.DS_Store
+Thumbs.db
+
+# Upstream sample images are retained locally for research only.
+asset-sources/catvton-v4/official-test-garment.jpeg

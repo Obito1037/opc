@@ -1,0 +1,10 @@
+{
+  "tryOn": {
+    "provider": "local-catvton"
+  },
+  "motion": {
+    "provider": "local-tps",
+    "enabled": true,
+    "acceptsDrivingVideo": true
+  }
+}
